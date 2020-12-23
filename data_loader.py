@@ -160,7 +160,7 @@ def get_imbalanced(dataset, num_sample_per_class, batch_size, TF_train, TF_test)
     else:
         raise NotImplementedError()
 
-    train_cifar = dataset_(root=DATA_ROOT, train=True, download=False, transform=TF_train)
+    train_cifar = dataset_(root=DATA_ROOT, train=True, download=True, transform=TF_train)
     train_in_idx = get_imbalanced_data(train_cifar, num_sample_per_class)
     train_in_loader = torch.utils.data.DataLoader(train_cifar, batch_size=batch_size,
                                                   sampler=SubsetRandomSampler(train_in_idx), num_workers=8)

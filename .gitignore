@@ -8,3 +8,5 @@ data/
 **/*.pkl
 **/log.txt
 **/*.png
+*.csv
+**/logs/

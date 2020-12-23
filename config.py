@@ -136,7 +136,7 @@ else:
 ## Data Loader ##
 
 N_SAMPLES_PER_CLASS_BASE = [int(N_SAMPLES)] * N_CLASSES
-if ARGS.imb_type == 'longtail':
+if ARGS.imb_type == 'longtail': # imbalance type
     N_SAMPLES_PER_CLASS_BASE = make_longtailed_imb(N_SAMPLES, N_CLASSES, ARGS.ratio)
 elif ARGS.imb_type == 'step':
     for i in range(ARGS.imb_start, N_CLASSES):

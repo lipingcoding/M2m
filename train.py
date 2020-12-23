@@ -20,6 +20,7 @@ from tqdm import tqdm
 from utils import random_perturb, make_step, inf_data_gen, Logger
 from utils import soft_cross_entropy, classwise_loss, LDAMLoss, FocalLoss
 from config import *
+from data_loader import make_longtailed_imb, get_imbalanced, get_oversampled
 
 
 LOGNAME = 'Imbalance_' + LOGFILE_BASE
@@ -322,7 +323,7 @@ if __name__ == '__main__':
                 optimizer.load_state_dict(ckpt_t['optimizer'])
                 START_EPOCH = ckpt_t['epoch'] + 1
 
-            if ARGS.net_g is not None:
+            if ARGS.net_g is not None: # 导入训练好的 g
                 ckpt_g = ARGS.net_g
                 print(ckpt_g)
                 ckpt_g = torch.load(ckpt_g)
@@ -367,7 +368,7 @@ if __name__ == '__main__':
             per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(N_SAMPLES_PER_CLASS)
             per_cls_weights = torch.FloatTensor(per_cls_weights).to(device)
         else:
-            per_cls_weights = torch.ones(N_CLASSES).to(device)
+            per_cls_weights = torch.ones(N_CLASSES).to(device) # default
 
         ## Choos a loss function ##
 
