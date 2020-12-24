@@ -43,5 +43,5 @@ python train.py -gen --ratio 100 --decay 2e-4 --model resnet32 --dataset cifar10
 - `n`: run next line
 - `s`: step into the function
 - `r`: return the function
-- `unt`: until to break the loop
+- `unt`: until to break the loop (you need first go to the last line in the loop to run this command)
 - `q`: quit
