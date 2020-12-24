@@ -74,6 +74,10 @@ def train_epoch(model, criterion, optimizer, data_loader, logger=None):
         if epoch >= ARGS.warm and ARGS.smote:
             inputs, targets = next(smote_loader_inf)
 
+        """
+        inputs: [128, 3, 32, 32]
+        targets: [128]
+        """
         inputs, targets = inputs.to(device), targets.to(device)
         batch_size = inputs.size(0)
 
@@ -117,7 +121,7 @@ def generation(model_g, model_r, inputs, seed_targets, targets, p_accept,
     model_r.eval()
     criterion = nn.CrossEntropyLoss()
 
-    if random_start:
+    if random_start: # True
         random_noise = random_perturb(inputs, 'l2', 0.5)
         inputs = torch.clamp(inputs + random_noise, 0, 1)
 
@@ -126,7 +130,7 @@ def generation(model_g, model_r, inputs, seed_targets, targets, p_accept,
         outputs_g, _ = model_g(normalizer(inputs))
         outputs_r, _ = model_r(normalizer(inputs))
 
-        loss = criterion(outputs_g, targets) + lam * classwise_loss(outputs_r, seed_targets)
+        loss = criterion(outputs_g, targets) + lam * classwise_loss(outputs_r, seed_targets) # Equation (2)
         grad, = torch.autograd.grad(loss, [inputs])
 
         inputs = inputs - make_step(grad, 'l2', step_size)
@@ -147,25 +151,34 @@ def generation(model_g, model_r, inputs, seed_targets, targets, p_accept,
 
 
 def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, targets_orig, gen_idx, gen_targets):
+    """
+    model_train: f
+    model_gen  : g
+    inputs_orig:  原始的不平衡的样本
+    targets_orig: 原始的不平衡的样本标签
+    gen_idx:      从原始样本中选出的要生成的少类的样本 id 
+    """
     batch_size = inputs_orig.size(0)
 
     inputs = inputs_orig.clone()
     targets = targets_orig.clone()
 
     ########################
+    """
+    N_SAMPLES_PER_CLASS_T: N_SAMPLES_PER_CLASS_T: [5000., 2997., 1796., 1077.,  645.,  387.,  232.,  139.,   83.,   50.], 每种类别的样本数目
+    """
+    bs = N_SAMPLES_PER_CLASS_T[targets_orig].repeat(gen_idx.size(0), 1) # e.g. (101, 128),
+    gs = N_SAMPLES_PER_CLASS_T[gen_targets].view(-1, 1) # e.g. (101, 1)
 
-    bs = N_SAMPLES_PER_CLASS_T[targets_orig].repeat(gen_idx.size(0), 1)
-    gs = N_SAMPLES_PER_CLASS_T[gen_targets].view(-1, 1)
-
-    delta = F.relu(bs - gs)
+    delta = F.relu(bs - gs) # (101, 128)
     p_accept = 1 - ARGS.beta ** delta
-    mask_valid = (p_accept.sum(1) > 0)
+    mask_valid = (p_accept.sum(1) > 0) # 在该 batch 中至少有一个样本被选出作为 seed, 该少样本才被选出
 
     gen_idx = gen_idx[mask_valid]
     gen_targets = gen_targets[mask_valid]
-    p_accept = p_accept[mask_valid]
+    p_accept = p_accept[mask_valid] # e.g. (90, 128)
 
-    select_idx = torch.multinomial(p_accept, 1, replacement=True).view(-1)
+    select_idx = torch.multinomial(p_accept, 1, replacement=True).view(-1) # 选出 seed 样本
     p_accept = p_accept.gather(1, select_idx.view(-1, 1)).view(-1)
 
     seed_targets = targets_orig[select_idx]
@@ -243,12 +256,19 @@ def train_gen_epoch(net_t, net_g, criterion, optimizer, data_loader):
     for inputs, targets in tqdm(data_loader):
         batch_size = inputs.size(0)
         inputs, targets = inputs.to(device), targets.to(device)
+        """
+        inputs: torch.Size([128, 3, 32, 32])
+        targets: torch.Size([128])
+        """
 
         # Set a generation target for current batch with re-sampling
-        if ARGS.imb_type != 'none':  # Imbalanced
+        if ARGS.imb_type != 'none':  # Imbalanced, ARGS.imb_type = 'longtail'
             # Keep the sample with this probability
+            """
+            N_SAMPLES_PER_CLASS_T: [5000., 2997., 1796., 1077.,  645.,  387.,  232.,  139.,   83.,   50.]
+            """
             gen_probs = N_SAMPLES_PER_CLASS_T[targets] / N_SAMPLES_PER_CLASS_T[0]
-            gen_index = (1 - torch.bernoulli(gen_probs)).nonzero()    # Generation index
+            gen_index = (1 - torch.bernoulli(gen_probs)).nonzero()    # 1 - \frac{N_{y_i}}{N_1}, see Page 4 subsection "Practical implementation vis re-sampling"
             gen_index = gen_index.view(-1)
             gen_targets = targets[gen_index]
         else:   # Balanced
@@ -294,29 +314,39 @@ def train_gen_epoch(net_t, net_g, criterion, optimizer, data_loader):
 
 
 if __name__ == '__main__':
+    # import pdb; pdb.set_trace()
     TEST_ACC = 0  # best test accuracy
     BEST_VAL = 0  # best validation accuracy
 
     # Weights for virtual samples are generated
     logger.log('==> Building model: %s' % MODEL)
-    net = models.__dict__[MODEL](N_CLASSES)
-    net_seed = models.__dict__[MODEL](N_CLASSES)
+    """
+    MODEL: 'resnet32'
+    N_CLASSES: 10
+    """
+    net = models.__dict__[MODEL](N_CLASSES) # resnet32
+    net_seed = models.__dict__[MODEL](N_CLASSES) # resnet32
 
     net, net_seed = net.to(device), net_seed.to(device)
     optimizer = optim.SGD(net.parameters(), lr=ARGS.lr, momentum=0.9, weight_decay=ARGS.decay)
 
-    if ARGS.resume:
+    if ARGS.resume: # True
         # Load checkpoint.
         logger.log('==> Resuming from checkpoint..')
-        ckpt_g = f'./checkpoint/{DATASET}/ratio{ARGS.ratio}/erm_trial1_{MODEL}.t7'
+        ckpt_g = f'./checkpoint/{DATASET}/ratio{ARGS.ratio}/erm_trial1_{MODEL}.t7' # checkpoint/erm_r100_c10_trial1.t7
 
+        """
+        net_both: None, 两个网络共同的 pretrained model
+        net_t: None, path of network to train
+        net_g: './checkpoint/erm_r100_c10_trial1.t7', path of network to generate
+        """
         if ARGS.net_both is not None:
             ckpt_t = torch.load(ARGS.net_both)
             net.load_state_dict(ckpt_t['net'])
             optimizer.load_state_dict(ckpt_t['optimizer'])
             START_EPOCH = ckpt_t['epoch'] + 1
             net_seed.load_state_dict(ckpt_t['net2'])
-        else:
+        else: # True
             if ARGS.net_t is not None:
                 ckpt_t = torch.load(ARGS.net_t)
                 net.load_state_dict(ckpt_t['net'])
@@ -336,9 +366,18 @@ if __name__ == '__main__':
     elif N_GPUS == 1:
         logger.log('Single-GPU mode.')
 
+    """
+    ARGS.warm: 160, 先 warm up, 不进行 M2m
+    ARGS.over: True
+    """
     if ARGS.warm < START_EPOCH and ARGS.over:
         raise ValueError("warm < START_EPOCH")
 
+    """
+    EPOCH: 200
+    N_CLASSES: 10
+    START_EPOCH: 0
+    """
     SUCCESS = torch.zeros(EPOCH, N_CLASSES, 2)
     test_stats = {}
     for epoch in range(START_EPOCH, EPOCH):
@@ -346,19 +385,28 @@ if __name__ == '__main__':
 
         adjust_learning_rate(optimizer, LR, epoch)
 
+        """
+        ARGS.smote: False
+        ARGS.over: True
+        """
         if epoch == ARGS.warm and ARGS.over:
-            if ARGS.smote:
+            if ARGS.smote: # False
                 logger.log("=============== Applying smote sampling ===============")
                 smote_loader, _, _ = get_smote(DATASET, N_SAMPLES_PER_CLASS, BATCH_SIZE, transform_train, transform_test)
                 smote_loader_inf = inf_data_gen(smote_loader)
-            else:
+            else: # True
                 logger.log("=============== Applying over sampling ===============")
+                """
+                get_oversampled: 返回 train_loader, val_loader, test_loader, 其中 train_loader 是 class_balanced 过后的
+                """
                 train_loader, _, _ = get_oversampled(DATASET, N_SAMPLES_PER_CLASS, BATCH_SIZE,
-                                                     transform_train, transform_test)
+                                                     transform_train, transform_test) # train_loader, val_loader, test_loader
 
         ## For Cost-Sensitive Learning ##
-
-        if ARGS.cost and epoch >= ARGS.warm:
+        """
+        ARGS.cost: False
+        """
+        if ARGS.cost and epoch >= ARGS.warm: # False
             beta = ARGS.eff_beta
             if beta < 1:
                 effective_num = 1.0 - np.power(beta, N_SAMPLES_PER_CLASS)
@@ -367,8 +415,8 @@ if __name__ == '__main__':
                 per_cls_weights = 1 / np.array(N_SAMPLES_PER_CLASS)
             per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(N_SAMPLES_PER_CLASS)
             per_cls_weights = torch.FloatTensor(per_cls_weights).to(device)
-        else:
-            per_cls_weights = torch.ones(N_CLASSES).to(device) # default
+        else: # True
+            per_cls_weights = torch.ones(N_CLASSES).to(device) # default, tensor([1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
 
         ## Choos a loss function ##
 
@@ -383,16 +431,18 @@ if __name__ == '__main__':
             raise ValueError("Wrong Loss Type")
 
         ## Training ( ARGS.warm is used for deferred re-balancing ) ##
-
+        # deferred 推迟的
         if epoch >= ARGS.warm and ARGS.gen:
             train_stats = train_gen_epoch(net, net_seed, criterion, optimizer, train_loader)
             SUCCESS[epoch, :, :] = train_stats['t_success'].float()
             logger.log(SUCCESS[epoch, -10:, :])
             np.save(LOGDIR + '/success.npy', SUCCESS.cpu().numpy())
-        else:
+        else: # 前 160 个 epoch
+            import pdb; pdb.set_trace()
             train_loss, train_acc = train_epoch(net, criterion, optimizer, train_loader, logger)
             train_stats = {'train_loss': train_loss, 'train_acc': train_acc}
-            if epoch == 159:
+            # if epoch == 159: 
+            if epoch == ARGS.warm - 1: # by Wang Liping 2020-12-23 21:00:52
                 save_checkpoint(train_acc, net, optimizer, epoch, True)
 
         ## Evaluation ##

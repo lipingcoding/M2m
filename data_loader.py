@@ -62,9 +62,9 @@ def get_oversampled_data(dataset, num_sample_per_class, random_seed=0):
     Input: A dataset (e.g., CIFAR-10), num_sample_per_class: list of integers
     Output: oversampled_list ( weights are increased )
     """
-    length = dataset.__len__()
-    num_sample_per_class = list(num_sample_per_class)
-    num_samples = list(num_sample_per_class)
+    length = dataset.__len__() # 12406
+    num_sample_per_class = list(num_sample_per_class) # (5000, 2997, 1796, 1077, 645, 387, 232, 139, 83, 50)
+    num_samples = list(num_sample_per_class) # (5000, 2997, 1796, 1077, 645, 387, 232, 139, 83, 50)
 
     selected_list = []
     indices = list(range(0,length))
@@ -75,7 +75,7 @@ def get_oversampled_data(dataset, num_sample_per_class, random_seed=0):
             selected_list.append(1 / num_samples[label])
             num_sample_per_class[label] -= 1
 
-    return selected_list
+    return selected_list # (12406,) [0.0002, 0.0002, ..., 0.02]
 
 
 def get_imbalanced_data(dataset, num_sample_per_class, shuffle=False, random_seed=0):
@@ -100,38 +100,54 @@ def get_imbalanced_data(dataset, num_sample_per_class, shuffle=False, random_see
 
 
 def get_oversampled(dataset, num_sample_per_class, batch_size, TF_train, TF_test):
+    """
+    num_sample_per_class: (5000, 2997, 1796, 1077, 645, 387, 232, 139, 83, 50)
+    """
     print("Building {} CV data loader with {} workers".format(dataset, 8))
     ds = []
 
     if dataset == 'cifar10':
         dataset_ = datasets.CIFAR10
-        num_test_samples = num_test_samples_cifar10
+        num_test_samples = num_test_samples_cifar10 # list, [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
     elif dataset == 'cifar100':
         dataset_ = datasets.CIFAR100
         num_test_samples = num_test_samples_cifar100
     else:
         raise NotImplementedError()
 
-    train_cifar = dataset_(root=DATA_ROOT, train=True, download=False, transform=TF_train)
+    train_cifar = dataset_(root=DATA_ROOT, train=True, download=False, transform=TF_train) # <class 'torchvision.datasets.cifar.CIFAR10'>
 
-    targets = np.array(train_cifar.targets)
+    targets = np.array(train_cifar.targets) # (50000,)
+    """
+    for cifar10,
+    classes: array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    class_counts: array([5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000])
+    """
     classes, class_counts = np.unique(targets, return_counts=True)
     nb_classes = len(classes)
 
-    imbal_class_counts = [int(i) for i in num_sample_per_class]
+    imbal_class_counts = [int(i) for i in num_sample_per_class] # [5000, 2997, 1796, 1077, 645, 387, 232, 139, 83, 50], sum is 12406
     class_indices = [np.where(targets == i)[0] for i in range(nb_classes)]
 
     imbal_class_indices = [class_idx[:class_count] for class_idx, class_count in zip(class_indices, imbal_class_counts)]
-    imbal_class_indices = np.hstack(imbal_class_indices)
+    imbal_class_indices = np.hstack(imbal_class_indices) # (12406, ), 每个类别对应的样本的 id
 
-    train_cifar.targets = targets[imbal_class_indices]
-    train_cifar.data = train_cifar.data[imbal_class_indices]
+    train_cifar.targets = targets[imbal_class_indices] # (12406, )
+    train_cifar.data = train_cifar.data[imbal_class_indices]  # (50000, 32, 32, 3) -> (12406, 32, 32, 3)
 
     assert len(train_cifar.targets) == len(train_cifar.data)
 
-    train_in_idx = get_oversampled_data(train_cifar, num_sample_per_class)
-    train_in_loader = DataLoader(train_cifar, batch_size=batch_size,
-                                 sampler=WeightedRandomSampler(train_in_idx, len(train_in_idx)), num_workers=8)
+    """
+    这里的 train_in_idx 名字取得不好, 其实是 每个样本的 weight
+    """
+    train_in_idx = get_oversampled_data(train_cifar, num_sample_per_class)  # (12406, ), [0.0002, 0.0002, ..., 0.02]
+    """
+    解释下 DataLoader 的 sampler 参数, sampler 的 __iter__ 返回 sample 的 idx
+    """
+    # train_in_loader = DataLoader(train_cifar, batch_size=batch_size,
+    #                              sampler=WeightedRandomSampler(train_in_idx, len(train_in_idx)), num_workers=8)
+    train_in_loader = DataLoader(train_cifar, batch_size=batch_size, # by Liping Wang, add argument's keyword for clarification and behave same as the last line
+                                 sampler=WeightedRandomSampler(weights=train_in_idx, num_samples=len(train_in_idx), replacement=True), num_workers=8)
     ds.append(train_in_loader)
 
     test_cifar = dataset_(root=DATA_ROOT, train=False, download=False, transform=TF_test)
@@ -144,7 +160,7 @@ def get_oversampled(dataset, num_sample_per_class, batch_size, TF_train, TF_test
     ds.append(test_loader)
     ds = ds[0] if len(ds) == 1 else ds
 
-    return ds
+    return ds #(train_in_loader, val_loader, test_loader)
 
 
 def get_imbalanced(dataset, num_sample_per_class, batch_size, TF_train, TF_test):
