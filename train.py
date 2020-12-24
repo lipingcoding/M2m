@@ -63,6 +63,9 @@ def save_checkpoint(acc, model, optim, epoch, index=False):
 
 
 def train_epoch(model, criterion, optimizer, data_loader, logger=None):
+    """
+    只训练 f, 不进行 M2m
+    """
     model.train()
 
     train_loss = 0

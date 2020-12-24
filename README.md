@@ -33,3 +33,15 @@ python train.py -gen --ratio 100 --decay 2e-4 --model resnet32 --dataset cifar10
 --lr 0.1 --batch-size 128 --name 'M2m' --beta 0.999 --lam 0.5 --gamma 0.9 \
 --step_size 0.1 --attack_iter 10 --warm 160 --epoch 200 --net_g ./checkpoint/erm_r100_c10_trial1.t7
 ```
+## Code history by Liping
+### 2020-12-24
+- add lots of comments for easy reading
+- you can run code line by line with the help of pdb through this command: `CUDA_VISIBLE_DEVICES=1 python train.py -gen -r --ratio 100 --decay 2e-4 --model resnet32 --dataset cifar10 --lr 0.1 --batch-size 128 --name 'M2m' --beta 0.999 --lam 0.5 --gamma 0.9 --step_size 0.1 --attack_iter 10 --warm 1 --epoch 200 --net_g ./checkpoint/erm_r100_c10_trial1.t7`
+
+## pdb hints:
+- `l.`: show neighbourhood lines
+- `n`: run next line
+- `s`: step into the function
+- `r`: return the function
+- `unt`: until to break the loop
+- `q`: quit
