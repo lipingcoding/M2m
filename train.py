@@ -18,7 +18,7 @@ import torch.optim as optim
 from tqdm import tqdm
 
 from utils import random_perturb, make_step, inf_data_gen, Logger
-from utils import soft_cross_entropy, classwise_loss, LDAMLoss, FocalLoss
+from utils import soft_cross_entropy, LDAMLoss, FocalLoss
 from config import *
 from data_loader import make_longtailed_imb, get_imbalanced, get_oversampled
 
@@ -126,15 +126,15 @@ def generation(model_g, model_r, inputs, seed_targets, targets, p_accept,
 
     if random_start: # True
         random_noise = random_perturb(inputs, 'l2', 0.5)
-        inputs = torch.clamp(inputs + random_noise, 0, 1)
+        inputs = torch.clamp(inputs + random_noise, 0, 1) # 截断在一定范围内
 
     for _ in range(max_iter):
         inputs = inputs.clone().detach().requires_grad_(True)
         outputs_g, _ = model_g(normalizer(inputs))
-        outputs_r, _ = model_r(normalizer(inputs))
+        outputs_r, _ = model_r(normalizer(inputs)) # logits
 
         loss = criterion(outputs_g, targets) + lam * classwise_loss(outputs_r, seed_targets) # Equation (2)
-        grad, = torch.autograd.grad(loss, [inputs])
+        grad, = torch.autograd.grad(loss, [inputs]) # torch.Size([92, 3, 32, 32])
 
         inputs = inputs - make_step(grad, 'l2', step_size)
         inputs = torch.clamp(inputs, 0, 1)
@@ -147,7 +147,7 @@ def generation(model_g, model_r, inputs, seed_targets, targets, p_accept,
     one_hot.scatter_(1, targets.view(-1, 1), 1)
     probs_g = torch.softmax(outputs_g, dim=1)[one_hot.to(torch.bool)]
 
-    correct = (probs_g >= gamma) * torch.bernoulli(p_accept).byte().to(device)
+    correct = (probs_g >= gamma) * torch.bernoulli(p_accept).byte().to(device) # 生成的足够逼真, 且不被拒识
     model_r.train()
 
     return inputs, correct
@@ -170,12 +170,14 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
     """
     N_SAMPLES_PER_CLASS_T: N_SAMPLES_PER_CLASS_T: [5000., 2997., 1796., 1077.,  645.,  387.,  232.,  139.,   83.,   50.], 每种类别的样本数目
     """
+    import pdb; pdb.set_trace()
     bs = N_SAMPLES_PER_CLASS_T[targets_orig].repeat(gen_idx.size(0), 1) # e.g. (101, 128),
     gs = N_SAMPLES_PER_CLASS_T[gen_targets].view(-1, 1) # e.g. (101, 1)
 
     delta = F.relu(bs - gs) # (101, 128)
     p_accept = 1 - ARGS.beta ** delta
-    mask_valid = (p_accept.sum(1) > 0) # 在该 batch 中至少有一个样本被选出作为 seed, 该少样本才被选出
+    # 第二次筛选
+    mask_valid = (p_accept.sum(1) > 0) # 在该 batch 中至少有一个样本被选出作为 seed, 该少样本才被选出 
 
     gen_idx = gen_idx[mask_valid]
     gen_targets = gen_targets[mask_valid]
@@ -187,9 +189,9 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
     seed_targets = targets_orig[select_idx]
     seed_images = inputs_orig[select_idx]
 
+    import pdb; pdb.set_trace()
     gen_inputs, correct_mask = generation(model_gen, model_train, seed_images, seed_targets, gen_targets, p_accept,
                                           ARGS.gamma, ARGS.lam, ARGS.step_size, True, ARGS.attack_iter)
-
     ########################
 
     # Only change the correctly generated samples
@@ -271,6 +273,7 @@ def train_gen_epoch(net_t, net_g, criterion, optimizer, data_loader):
             N_SAMPLES_PER_CLASS_T: [5000., 2997., 1796., 1077.,  645.,  387.,  232.,  139.,   83.,   50.]
             """
             gen_probs = N_SAMPLES_PER_CLASS_T[targets] / N_SAMPLES_PER_CLASS_T[0]
+            # 第一次筛选
             gen_index = (1 - torch.bernoulli(gen_probs)).nonzero()    # 1 - \frac{N_{y_i}}{N_1}, see Page 4 subsection "Practical implementation vis re-sampling"
             gen_index = gen_index.view(-1)
             gen_targets = targets[gen_index]
@@ -392,6 +395,7 @@ if __name__ == '__main__':
         ARGS.smote: False
         ARGS.over: True
         """
+        # 开始 M2m 的第一轮, 得到一个 balanced dataloader
         if epoch == ARGS.warm and ARGS.over:
             if ARGS.smote: # False
                 logger.log("=============== Applying smote sampling ===============")
@@ -441,7 +445,7 @@ if __name__ == '__main__':
             logger.log(SUCCESS[epoch, -10:, :])
             np.save(LOGDIR + '/success.npy', SUCCESS.cpu().numpy())
         else: # 前 160 个 epoch
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
             train_loss, train_acc = train_epoch(net, criterion, optimizer, train_loader, logger)
             train_stats = {'train_loss': train_loss, 'train_acc': train_acc}
             # if epoch == 159: 

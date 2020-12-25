@@ -103,12 +103,6 @@ def soft_cross_entropy(input, labels, reduction='mean'):
         raise NotImplementedError()
 
 
-def classwise_loss(outputs, targets):
-    out_1hot = torch.ones_like(outputs)
-    out_1hot.scatter_(1, targets.view(-1, 1), -1)
-    return (outputs * out_1hot).mean()
-
-
 def focal_loss(input_values, gamma):
     """Computes the focal loss
     
