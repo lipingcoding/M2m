@@ -247,7 +247,7 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
     return oth_loss_total, gen_loss_total, num_others, num_correct_oth, num_gen, num_correct_gen, p_g_orig, p_g_targ, success
 
 
-def train_gen_epoch(net_t, net_g, criterion, optimizer, data_loader):
+def train_gen_epoch(epoch, net_t, net_g, criterion, optimizer, data_loader):
     net_t.train()
     net_g.eval()
 
@@ -301,16 +301,21 @@ def train_gen_epoch(net_t, net_g, criterion, optimizer, data_loader):
         'gen_acc': 100. * correct_gen / total_gen,
         'p_g_orig': p_g_orig / total_gen,
         'p_g_targ': p_g_targ / total_gen,
-        't_success': t_success
+        't_success': t_success,
+        'correct_clean': correct_oth,
+        'total_clean': total_oth,
+        'correct_gen': correct_gen,
+        'total_gen': total_gen
     }
 
-    msg = 't_Loss: %.3f | g_Loss: %.3f | Acc: %.3f%% (%d/%d) | Acc_gen: %.3f%% (%d/%d) ' \
-          '| Prob_orig: %.3f | Prob_targ: %.3f' % (
-        res['train_loss'], res['gen_loss'],
-        res['train_acc'], correct_oth, total_oth,
-        res['gen_acc'], correct_gen, total_gen,
-        res['p_g_orig'], res['p_g_targ']
-    )
+    # msg = 't_Loss: %.3f | g_Loss: %.3f | Acc: %.3f%% (%d/%d) | Acc_gen: %.3f%% (%d/%d) ' \
+    #       '| Prob_orig: %.3f | Prob_targ: %.3f' % (
+    #     res['train_loss'], res['gen_loss'],
+    #     res['train_acc'], correct_oth, total_oth,
+    #     res['gen_acc'], correct_gen, total_gen,
+    #     res['p_g_orig'], res['p_g_targ']
+    # )
+    msg = f'#####\nEpoch: {epoch}, clean: {int(correct_oth)}/{int(total_oth)}, {int(correct_gen)}/{int(total_gen)}\n'
     if logger:
         logger.log(msg)
     else:
@@ -440,7 +445,7 @@ if __name__ == '__main__':
         ## Training ( ARGS.warm is used for deferred re-balancing ) ##
         # deferred 推迟的
         if epoch >= ARGS.warm and ARGS.gen:
-            train_stats = train_gen_epoch(net, net_seed, criterion, optimizer, train_loader)
+            train_stats = train_gen_epoch(epoch, net, net_seed, criterion, optimizer, train_loader)
             SUCCESS[epoch, :, :] = train_stats['t_success'].float()
             # logger.log(SUCCESS[epoch, -10:, :])
             np.save(LOGDIR + '/success.npy', SUCCESS.cpu().numpy())
