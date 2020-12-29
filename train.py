@@ -233,12 +233,13 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
         num_correct_gen = sum_t(predicted_gen.eq(targets[gen_c_idx]))
         probs = torch.softmax(outputs[gen_c_idx], 1).data
 
-        p_g_orig = probs.gather(1, seed_targets[correct_mask].view(-1, 1))
+        p_g_orig = probs.gather(1, seed_targets[correct_mask].view(-1, 1)) # 判为原来 label (多类)
         p_g_orig = sum_t(p_g_orig)
 
-        p_g_targ = probs.gather(1, gen_targets_c.view(-1, 1))
+        p_g_targ = probs.gather(1, gen_targets_c.view(-1, 1)) # 判为现在 target (少类)
         p_g_targ = sum_t(p_g_targ)
 
+    # 保存每个类别成功生成的样本数目 和 想要生成的样本数目, 即生成成功率
     for i in range(N_CLASSES):
         if num_gen > 0:
             success[i, 0] = sum_t(gen_targets_c == i)
@@ -248,6 +249,8 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
 
 
 def train_gen_epoch(epoch, net_t, net_g, criterion, optimizer, data_loader):
+    logger.log(f'Gen epoch {epoch}')
+    logger.log('******* Train *******')
     net_t.train()
     net_g.eval()
 
@@ -302,20 +305,21 @@ def train_gen_epoch(epoch, net_t, net_g, criterion, optimizer, data_loader):
         'p_g_orig': p_g_orig / total_gen,
         'p_g_targ': p_g_targ / total_gen,
         't_success': t_success,
-        'correct_clean': correct_oth,
-        'total_clean': total_oth,
-        'correct_gen': correct_gen,
-        'total_gen': total_gen
+        # 'correct_clean': correct_oth,
+        # 'total_clean': total_oth,
+        # 'correct_gen': correct_gen,
+        # 'total_gen': total_gen
     }
 
-    # msg = 't_Loss: %.3f | g_Loss: %.3f | Acc: %.3f%% (%d/%d) | Acc_gen: %.3f%% (%d/%d) ' \
-    #       '| Prob_orig: %.3f | Prob_targ: %.3f' % (
-    #     res['train_loss'], res['gen_loss'],
-    #     res['train_acc'], correct_oth, total_oth,
-    #     res['gen_acc'], correct_gen, total_gen,
-    #     res['p_g_orig'], res['p_g_targ']
-    # )
-    msg = f'#####\nEpoch: {epoch}, clean: {int(correct_oth)}/{int(total_oth)}, {int(correct_gen)}/{int(total_gen)}\n'
+    msg = 'clean_Loss: %.3f | g_Loss: %.3f | Acc_clean: %.3f%% (%d/%d) | Acc_gen: %.3f%% (%d/%d) ' \
+          '| Prob_orig: %.3f | Prob_targ: %.3f' % (
+        res['train_loss'], res['gen_loss'],
+        res['train_acc'], correct_oth, total_oth,
+        res['gen_acc'], correct_gen, total_gen,
+        res['p_g_orig'], res['p_g_targ']
+    )
+    # msg = f'clean_loss: {} | gen_loss: {other_loss} | clean: {int(correct_oth)}/{total_oth}={train_acc} | gen:{int(correct_gen)}/{total_gen}={gen_acc}'
+    # msg = f'#####\nEpoch: {epoch}, clean: {int(correct_oth)}/{int(total_oth)}, {int(correct_gen)}/{int(total_gen)}\n'
     if logger:
         logger.log(msg)
     else:
@@ -392,7 +396,7 @@ if __name__ == '__main__':
     SUCCESS = torch.zeros(EPOCH, N_CLASSES, 2)
     test_stats = {}
     for epoch in range(START_EPOCH, EPOCH):
-        logger.log(' * Epoch %d: %s' % (epoch, LOGDIR))
+        # logger.log(' * Epoch %d: %s' % (epoch, LOGDIR))
 
         adjust_learning_rate(optimizer, LR, epoch)
 
@@ -458,18 +462,19 @@ if __name__ == '__main__':
                 save_checkpoint(train_acc, net, optimizer, epoch, True)
 
         ## Evaluation ##
-
+        logger.log(f'****** Validation ******')
         val_eval = evaluate(net, val_loader, logger=logger)
         val_acc = val_eval['acc']
         if val_acc >= BEST_VAL:
             BEST_VAL = val_acc
 
+            logger.log(f'****** Test ******')
             test_stats = evaluate(net, test_loader, logger=logger)
             TEST_ACC = test_stats['acc']
             TEST_ACC_CLASS = test_stats['class_acc']
 
             save_checkpoint(TEST_ACC, net, optimizer, epoch)
-            logger.log("========== Class-wise test performance ( avg : {} ) ==========".format(TEST_ACC_CLASS.mean()))
+            # logger.log("========== Class-wise test performance ( avg : {} ) ==========".format(TEST_ACC_CLASS.mean()))
             np.save(LOGDIR + '/classwise_acc.npy', TEST_ACC_CLASS.cpu())
 
         def _convert_scala(x):
@@ -486,6 +491,8 @@ if __name__ == '__main__':
         with open(LOG_CSV, 'a') as f:
             logwriter = csv.writer(f, delimiter=',')
             logwriter.writerow(log_vector)
+
+        logger.log('\n\n\n')
 
     logger.log(' * %s' % LOGDIR)
     logger.log("Best Accuracy : {}".format(TEST_ACC))
