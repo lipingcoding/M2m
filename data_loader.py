@@ -20,7 +20,7 @@ DATA_ROOT = os.path.expanduser('~/data')
 
 def make_longtailed_imb(max_num, class_num, gamma):
     mu = np.power(1/gamma, 1/(class_num - 1))
-    print(mu)
+    # print(mu)
     class_num_list = []
     for i in range(class_num):
         class_num_list.append(int(max_num * np.power(mu, i)))
@@ -262,7 +262,7 @@ def get_smote(dataset,  num_sample_per_class, batch_size, TF_train, TF_test):
     train_cifar.data = np.concatenate((train_cifar.data, aug_data), axis=0)
 
     print("Augmented data num = {}".format(len(aug_label)))
-    print(train_cifar.data.shape)
+    # print(train_cifar.data.shape)
 
     train_in_loader = torch.utils.data.DataLoader(train_cifar, batch_size=batch_size, shuffle=True, num_workers=8)
     ds.append(train_in_loader)

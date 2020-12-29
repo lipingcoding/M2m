@@ -170,7 +170,7 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
     """
     N_SAMPLES_PER_CLASS_T: N_SAMPLES_PER_CLASS_T: [5000., 2997., 1796., 1077.,  645.,  387.,  232.,  139.,   83.,   50.], 每种类别的样本数目
     """
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     bs = N_SAMPLES_PER_CLASS_T[targets_orig].repeat(gen_idx.size(0), 1) # e.g. (101, 128),
     gs = N_SAMPLES_PER_CLASS_T[gen_targets].view(-1, 1) # e.g. (101, 1)
 
@@ -189,7 +189,7 @@ def train_net(model_train, model_gen, criterion, optimizer_train, inputs_orig, t
     seed_targets = targets_orig[select_idx]
     seed_images = inputs_orig[select_idx]
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     gen_inputs, correct_mask = generation(model_gen, model_train, seed_images, seed_targets, gen_targets, p_accept,
                                           ARGS.gamma, ARGS.lam, ARGS.step_size, True, ARGS.attack_iter)
     ########################
@@ -442,7 +442,7 @@ if __name__ == '__main__':
         if epoch >= ARGS.warm and ARGS.gen:
             train_stats = train_gen_epoch(net, net_seed, criterion, optimizer, train_loader)
             SUCCESS[epoch, :, :] = train_stats['t_success'].float()
-            logger.log(SUCCESS[epoch, -10:, :])
+            # logger.log(SUCCESS[epoch, -10:, :])
             np.save(LOGDIR + '/success.npy', SUCCESS.cpu().numpy())
         else: # 前 160 个 epoch
             # import pdb; pdb.set_trace()

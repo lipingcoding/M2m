@@ -193,14 +193,14 @@ def make_imb_data(max_num, min_num, class_num, gamma):
     class_num_list = []
     for i in range(class_num):
         class_num_list.append(int(torch.round(a / (torch.pow(class_idx[i], gamma) + b))))
-    print(class_num_list)
+    # print(class_num_list)
 
     return list(class_num_list)
 
 
 def make_imb_data2(max_num, class_num, gamma):
     mu = np.power(1/gamma, 1/(class_num - 1))
-    print(mu)
+    # print(mu)
     class_num_list = []
     for i in range(class_num):
         class_num_list.append(int(max_num * np.power(mu, i)))
